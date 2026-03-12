@@ -1,135 +1,142 @@
 
-from flask import Flask, render_template, request, redirect, url_for, g, jsonify
-import sqlite3, os, requests
+import os
+import sqlite3
+from flask import Flask, render_template, request, redirect, url_for
 from datetime import datetime
 
 app = Flask(__name__)
-import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
+DB_PATH = os.path.join(INSTANCE_DIR, "stars.db")
 
-# create instance folder if it doesn't exist
 os.makedirs(INSTANCE_DIR, exist_ok=True)
 
-DATABASE = os.path.join(INSTANCE_DIR, "stars.db")
-TMDB_API_KEY = "8759c347308b901c2477899708088368"
 
 def get_db():
-    db = getattr(g,"_database",None)
-    if db is None:
-        db = g._database = sqlite3.connect(DATABASE)
-        db.row_factory = sqlite3.Row
-    return db
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-@app.teardown_appcontext
-def close_connection(exception):
-    db = getattr(g,"_database",None)
-    if db is not None:
-        db.close()
-
-import sqlite3
-import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def init_db():
-    db_path = os.path.join(BASE_DIR, "instance", "stars.db")
-    schema_path = os.path.join(BASE_DIR, "schema.sql")
+    conn = get_db()
 
-    conn = sqlite3.connect(db_path)
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS movies(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        poster TEXT,
+        created_at TEXT
+    )
+    """)
 
-    with open(schema_path, "r") as f:
-        conn.executescript(f.read())
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS comments(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        movie_id INTEGER,
+        rating INTEGER,
+        comment TEXT,
+        likes INTEGER DEFAULT 0,
+        created_at TEXT,
+        FOREIGN KEY(movie_id) REFERENCES movies(id)
+    )
+    """)
 
     conn.commit()
     conn.close()
 
-@app.route("/init")
-def initialize():
-    init_db()
-    return "Database initialized"
+
+init_db()
+
 
 @app.route("/")
 def home():
     db = get_db()
-    movies = db.execute(
-        """
-        SELECT movies.*, COUNT(comments.id) as review_count
-        FROM movies
-        LEFT JOIN comments ON movies.id = comments.movie_id
-        GROUP BY movies.id
-        ORDER BY review_count DESC
-        """
-    ).fetchall()
+
+    movies = db.execute("""
+        SELECT m.*, 
+        IFNULL(AVG(c.rating),0) as avg_rating,
+        COUNT(c.id) as review_count
+        FROM movies m
+        LEFT JOIN comments c ON m.id = c.movie_id
+        GROUP BY m.id
+        ORDER BY m.created_at DESC
+    """).fetchall()
+
+    db.close()
+
     return render_template("home.html", movies=movies)
 
-@app.route("/search_movie")
-def search_movie():
-    query = request.args.get("q")
-    url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={query}"
-    data = requests.get(url).json()
 
-    results=[]
-    for m in data.get("results",[])[:5]:
-        poster = ""
-        if m.get("poster_path"):
-            poster = "https://image.tmdb.org/t/p/w500"+m["poster_path"]
-        results.append({"title":m["title"],"poster":poster})
-
-    return jsonify(results)
-
-@app.route("/add_movie", methods=["GET","POST"])
-def add_movie():
-    db = get_db()
-    if request.method == "POST":
-        title = request.form["title"]
-        poster = request.form["poster"]
-        review = request.form["review"]
-
-        db.execute(
-            "INSERT INTO movies(title,poster,review,created_at) VALUES(?,?,?,?)",
-            (title,poster,review,datetime.now())
-        )
-        db.commit()
-        return redirect(url_for("home"))
-
-    return render_template("add_movie.html")
-
-@app.route("/movie/<int:movie_id>", methods=["GET","POST"])
+@app.route("/movie/<int:movie_id>")
 def movie(movie_id):
     db = get_db()
 
-    if request.method == "POST":
-        rating = int(request.form["rating"])
-        comment = request.form["comment"]
-
-        db.execute(
-            "INSERT INTO comments(movie_id,rating,comment,likes,created_at) VALUES(?,?,?,?,?)",
-            (movie_id,rating,comment,0,datetime.now())
-        )
-        db.commit()
-        return redirect(url_for("movie",movie_id=movie_id))
-
-    movie = db.execute("SELECT * FROM movies WHERE id=?", (movie_id,)).fetchone()
+    movie = db.execute(
+        "SELECT * FROM movies WHERE id=?", (movie_id,)
+    ).fetchone()
 
     comments = db.execute(
-        "SELECT * FROM comments WHERE movie_id=? ORDER BY id DESC",(movie_id,)
+        "SELECT * FROM comments WHERE movie_id=? ORDER BY created_at DESC",
+        (movie_id,)
     ).fetchall()
 
-    ratings = [c["rating"] for c in comments]
-    avg = round(sum(ratings)/len(ratings),2) if ratings else 0
+    db.close()
 
-    return render_template("movie.html",movie=movie,comments=comments,avg=avg)
+    return render_template("movie.html", movie=movie, comments=comments)
+
+
+@app.route("/add_movie", methods=["POST"])
+def add_movie():
+    title = request.form["title"]
+    poster = request.form["poster"]
+
+    db = get_db()
+
+    db.execute(
+        "INSERT INTO movies(title, poster, created_at) VALUES(?,?,?)",
+        (title, poster, datetime.now())
+    )
+
+    db.commit()
+    db.close()
+
+    return redirect(url_for("home"))
+
+
+@app.route("/add_review/<int:movie_id>", methods=["POST"])
+def add_review(movie_id):
+    rating = request.form["rating"]
+    comment = request.form["comment"]
+
+    db = get_db()
+
+    db.execute(
+        "INSERT INTO comments(movie_id,rating,comment,likes,created_at) VALUES(?,?,?,?,?)",
+        (movie_id, rating, comment, 0, datetime.now())
+    )
+
+    db.commit()
+    db.close()
+
+    return redirect(url_for("movie", movie_id=movie_id))
+
 
 @app.route("/like/<int:comment_id>")
 def like(comment_id):
     db = get_db()
-    db.execute("UPDATE comments SET likes = likes + 1 WHERE id=?",(comment_id,))
+
+    db.execute(
+        "UPDATE comments SET likes = likes + 1 WHERE id=?",
+        (comment_id,)
+    )
+
     db.commit()
+    db.close()
+
     return redirect(request.referrer)
 
+
 if __name__ == "__main__":
-    if not os.path.exists("instance"):
-        os.makedirs("instance")
     app.run(debug=True)
