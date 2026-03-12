@@ -1,0 +1,45 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>{{movie.title}}</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<a href="/">Back</a>
+
+<h1>{{movie.title}}</h1>
+<img src="{{movie.poster}}" class="poster">
+
+<p>{{movie.review}}</p>
+
+<h3>Average ⭐ {{avg}}</h3>
+
+<form method="POST">
+
+<div class="stars">
+<input type="radio" name="rating" value="5" id="s5"><label for="s5">★</label>
+<input type="radio" name="rating" value="4" id="s4"><label for="s4">★</label>
+<input type="radio" name="rating" value="3" id="s3"><label for="s3">★</label>
+<input type="radio" name="rating" value="2" id="s2"><label for="s2">★</label>
+<input type="radio" name="rating" value="1" id="s1"><label for="s1">★</label>
+</div>
+
+<textarea name="comment" placeholder="Your opinion"></textarea>
+
+<button>Post</button>
+</form>
+
+<h3>Community Reviews</h3>
+
+{% for c in comments %}
+<div class="comment">
+<b>Anonymous</b> ⭐ {{c.rating}}
+<p>{{c.comment}}</p>
+<a href="/like/{{c.id}}">👍 {{c.likes}}</a>
+</div>
+{% endfor %}
+
+</body>
+</html>

@@ -1,0 +1,30 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>Stars</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<h1>⭐ STARS</h1>
+<p>Trending movie opinions</p>
+
+<a href="/add_movie">Add Review</a>
+
+<div class="grid">
+
+{% for movie in movies %}
+<div class="card">
+<img src="{{movie.poster}}">
+<h2>{{movie.title}}</h2>
+<p>{{movie.review[:100]}}...</p>
+<p>🔥 {{movie.review_count}} reviews</p>
+<a href="/movie/{{movie.id}}">Open</a>
+</div>
+{% endfor %}
+
+</div>
+
+</body>
+</html>
