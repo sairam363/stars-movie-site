@@ -4,7 +4,15 @@ import sqlite3, os, requests
 from datetime import datetime
 
 app = Flask(__name__)
-DATABASE = os.path.join("instance","stars.db")
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
+
+# create instance folder if it doesn't exist
+os.makedirs(INSTANCE_DIR, exist_ok=True)
+
+DATABASE = os.path.join(INSTANCE_DIR, "stars.db")
 TMDB_API_KEY = "8759c347308b901c2477899708088368"
 
 def get_db():
