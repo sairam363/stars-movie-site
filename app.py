@@ -28,11 +28,22 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
+import sqlite3
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def init_db():
-    db = get_db()
-    with open("schema.sql") as f:
-        db.executescript(f.read())
-    db.commit()
+    db_path = os.path.join(BASE_DIR, "instance", "stars.db")
+    schema_path = os.path.join(BASE_DIR, "schema.sql")
+
+    conn = sqlite3.connect(db_path)
+
+    with open(schema_path, "r") as f:
+        conn.executescript(f.read())
+
+    conn.commit()
+    conn.close()
 
 @app.route("/init")
 def initialize():
